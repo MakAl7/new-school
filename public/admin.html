@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Админ-панель — Ударение!</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #eef1f6;
+      color: #1b2a44;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .header {
+      background: #1b2a44;
+      color: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+    .header h1 { font-size: 24px; margin-bottom: 10px; }
+    .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+    .tab {
+      padding: 10px 20px;
+      background: white;
+      border: 2px solid #1b2a44;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .tab.active { background: #1b2a44; color: white; }
+    .table {
+      width: 100%;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #1b2a44; color: white; padding: 12px; text-align: left; }
+    td { padding: 12px; border-bottom: 1px solid #e0e0e0; }
+    tr:hover { background: #f5f5f5; }
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-right: 5px;
+    }
+    .btn-primary { background: #2456a6; color: white; }
+    .btn-danger { background: #d9362e; color: white; }
+    .btn-success { background: #2f9e44; color: white; }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      max-width: 500px;
+      width: 90%;
+    }
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%;
+      padding: 8px;
+      border: 2px solid #d3dcea;
+      border-radius: 6px;
+    }
+    .search {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 10px;
+    }
+    .search input {
+      flex: 1;
+      padding: 10px;
+      border: 2px solid #d3dcea;
+      border-radius: 6px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .stat-value { font-size: 32px; font-weight: bold; color: #2456a6; }
+    .stat-label { font-size: 14px; color: #666; margin-top: 5px; }
+    .login {
+      max-width: 400px;
+      margin: 100px auto;
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    }
+    .login h2 { margin-bottom: 20px; text-align: center; }
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .badge-stress { background: #ffd43b; color: #1b2a44; }
+    .badge-vocab { background: #2456a6; color: white; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script>
+    const ADMIN_PASSWORD = 'admin123';
+    const DB_KEY_STRESS = 'udarenie-db-stress';
+    const DB_KEY_VOCAB = 'udarenie-db-vocab';
+
+    // Начальные данные
+    const INITIAL_STRESS = [
+      { id: 's1', word: 'торты', stress: 1, hint: 'То́рты — как шо́рты', difficulty: 1 },
+      { id: 's2', word: 'звонит', stress: 4, hint: 'Звони́т — как говори́т', difficulty: 1 },
+      { id: 's3', word: 'договор', stress: 5, hint: 'Догово́р — до конца', difficulty: 1 },
+    ];
+
+    const INITIAL_VOCAB = [
+      { id: 'v1', word: 'алфавит', missing: 'а', options: ['а', 'о', 'я'], hint: 'Алфавит начинается с А', class: 1, emoji: '📚' },
+      { id: 'v2', word: 'берёза', missing: 'ё', options: ['ё', 'е', 'и'], hint: 'БерЁза - дерево', class: 1, emoji: '🌳' },
+      { id: 'v3', word: 'ворона', missing: 'о', options: ['о', 'а', 'у'], hint: 'Ворона - птица', class: 1, emoji: '🐦' },
+    ];
+
+    // Database API
+    function getStressWords() {
+      const raw = localStorage.getItem(DB_KEY_STRESS);
+      if (!raw) {
+        localStorage.setItem(DB_KEY_STRESS, JSON.stringify(INITIAL_STRESS));
+        return INITIAL_STRESS;
+      }
+      return JSON.parse(raw);
+    }
+
+    function getVocabWords() {
+      const raw = localStorage.getItem(DB_KEY_VOCAB);
+      if (!raw) {
+        localStorage.setItem(DB_KEY_VOCAB, JSON.stringify(INITIAL_VOCAB));
+        return INITIAL_VOCAB;
+      }
+      return JSON.parse(raw);
+    }
+
+    function saveStressWords(words) {
+      localStorage.setItem(DB_KEY_STRESS, JSON.stringify(words));
+    }
+
+    function saveVocabWords(words) {
+      localStorage.setItem(DB_KEY_VOCAB, JSON.stringify(words));
+    }
+
+    function addStressWord(word) {
+      const words = getStressWords();
+      const maxId = words.reduce((max, w) => {
+        const num = parseInt(w.id.replace('s', '')) || 0;
+        return num > max ? num : max;
+      }, 0);
+      const newWord = { ...word, id: `s${maxId + 1}` };
+      words.push(newWord);
+      saveStressWords(words);
+      return newWord;
+    }
+
+    function addVocabWord(word) {
+      const words = getVocabWords();
+      const maxId = words.reduce((max, w) => {
+        const num = parseInt(w.id.replace('v', '')) || 0;
+        return num > max ? num : max;
+      }, 0);
+      const newWord = { ...word, id: `v${maxId + 1}` };
+      words.push(newWord);
+      saveVocabWords(words);
+      return newWord;
+    }
+
+    function updateStressWord(id, updates) {
+      const words = getStressWords();
+      const idx = words.findIndex(w => w.id === id);
+      if (idx >= 0) {
+        words[idx] = { ...words[idx], ...updates };
+        saveStressWords(words);
+      }
+    }
+
+    function updateVocabWord(id, updates) {
+      const words = getVocabWords();
+      const idx = words.findIndex(w => w.id === id);
+      if (idx >= 0) {
+        words[idx] = { ...words[idx], ...updates };
+        saveVocabWords(words);
+      }
+    }
+
+    function deleteStressWord(id) {
+      const words = getStressWords().filter(w => w.id !== id);
+      saveStressWords(words);
+    }
+
+    function deleteVocabWord(id) {
+      const words = getVocabWords().filter(w => w.id !== id);
+      saveVocabWords(words);
+    }
+
+    // UI
+    let isAuthenticated = false;
+    let currentTab = 'stress';
+    let editingWord = null;
+    let searchQuery = '';
+
+    function render() {
+      const app = document.getElementById('app');
+      
+      if (!isAuthenticated) {
+        app.innerHTML = `
+          <div class="login">
+            <h2>🔐 Админ-панель</h2>
+            <div class="form-group">
+              <label>Пароль</label>
+              <input type="password" id="password" placeholder="Введите пароль">
+            </div>
+            <button class="btn btn-primary" style="width: 100%;" onclick="login()">Войти</button>
+            <p style="margin-top: 15px; text-align: center; font-size: 12px; color: #666;">
+              Пароль по умолчанию: <code>admin123</code>
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      const stressWords = getStressWords();
+      const vocabWords = getVocabWords();
+
+      app.innerHTML = `
+        <div class="container">
+          <div class="header">
+            <h1>🔐 Админ-панель — Ударение!</h1>
+            <p>Управление базой данных</p>
+          </div>
+
+          <div class="stats">
+            <div class="stat-card">
+              <div class="stat-value">${stressWords.length}</div>
+              <div class="stat-label">Слов с ударениями</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">${vocabWords.length}</div>
+              <div class="stat-label">Словарных слов</div>
+            </div>
+          </div>
+
+          <div class="tabs">
+            <div class="tab ${currentTab === 'stress' ? 'active' : ''}" onclick="switchTab('stress')">
+              Ударения (${stressWords.length})
+            </div>
+            <div class="tab ${currentTab === 'vocab' ? 'active' : ''}" onclick="switchTab('vocab')">
+              Словарные слова (${vocabWords.length})
+            </div>
+            <div class="tab" onclick="logout()" style="margin-left: auto;">
+              Выйти
+            </div>
+          </div>
+
+          <div class="search">
+            <input type="text" placeholder="Поиск..." value="${searchQuery}" oninput="search(this.value)">
+            <button class="btn btn-success" onclick="openAddModal()">+ Добавить</button>
+          </div>
+
+          ${currentTab === 'stress' ? renderStressTable(stressWords) : renderVocabTable(vocabWords)}
+        </div>
+
+        ${renderModal()}
+      `;
+    }
+
+    function renderStressTable(words) {
+      const filtered = words.filter(w => 
+        w.word.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        w.hint.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+
+      return `
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Слово</th>
+                <th>Ударная гласная</th>
+                <th>Подсказка</th>
+                <th>Сложность</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.map(w => `
+                <tr>
+                  <td>${w.id}</td>
+                  <td><strong>${w.word}</strong></td>
+                  <td><span class="badge badge-stress">${w.stress} → "${w.word[w.stress] || '?'}"</span></td>
+                  <td>${w.hint}</td>
+                  <td>${w.difficulty}</td>
+                  <td>
+                    <button class="btn btn-primary" onclick="editStressWord('${w.id}')">✏️</button>
+                    <button class="btn btn-danger" onclick="deleteWord('stress', '${w.id}')">🗑️</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderVocabTable(words) {
+      const filtered = words.filter(w => 
+        w.word.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        w.hint.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+
+      return `
+        <div class="table">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Слово</th>
+                <th>Проверяемая</th>
+                <th>Варианты</th>
+                <th>Класс</th>
+                <th>Эмодзи</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filtered.map(w => `
+                <tr>
+                  <td>${w.id}</td>
+                  <td><strong>${w.word}</strong> ${w.emoji || ''}</td>
+                  <td><span class="badge badge-vocab">${w.missing}</span></td>
+                  <td>${w.options.join(', ')}</td>
+                  <td>${w.class}</td>
+                  <td>${w.emoji || ''}</td>
+                  <td>
+                    <button class="btn btn-primary" onclick="editVocabWord('${w.id}')">✏️</button>
+                    <button class="btn btn-danger" onclick="deleteWord('vocab', '${w.id}')">🗑️</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderModal() {
+      if (!editingWord) return '<div class="modal"></div>';
+
+      const isStress = editingWord.type === 'stress';
+      const word = editingWord.data;
+
+      return `
+        <div class="modal active">
+          <div class="modal-content">
+            <h2>${word.id ? 'Редактирование' : 'Новое слово'}</h2>
+            
+            <div class="form-group">
+              <label>Слово</label>
+              <input type="text" id="word" value="${word.word || ''}">
+            </div>
+
+            ${isStress ? `
+              <div class="form-group">
+                <label>Ударная гласная (индекс)</label>
+                <input type="number" id="stress" value="${word.stress || 0}" min="0">
+              </div>
+              <div class="form-group">
+                <label>Сложность (1-3)</label>
+                <select id="difficulty">
+                  <option value="1" ${word.difficulty === 1 ? 'selected' : ''}>1 - Лёгкое</option>
+                  <option value="2" ${word.difficulty === 2 ? 'selected' : ''}>2 - Среднее</option>
+                  <option value="3" ${word.difficulty === 3 ? 'selected' : ''}>3 - Сложное</option>
+                </select>
+              </div>
+            ` : `
+              <div class="form-group">
+                <label>Проверяемая буква</label>
+                <input type="text" id="missing" value="${word.missing || ''}">
+              </div>
+              <div class="form-group">
+                <label>Варианты ответа (через запятую)</label>
+                <input type="text" id="options" value="${(word.options || []).join(', ')}">
+              </div>
+              <div class="form-group">
+                <label>Класс (1-11)</label>
+                <input type="number" id="class" value="${word.class || 1}" min="1" max="11">
+              </div>
+              <div class="form-group">
+                <label>Эмодзи</label>
+                <input type="text" id="emoji" value="${word.emoji || ''}">
+              </div>
+            `}
+
+            <div class="form-group">
+              <label>Подсказка</label>
+              <textarea id="hint" rows="3">${word.hint || ''}</textarea>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+              <button class="btn btn-success" onclick="saveWord()">Сохранить</button>
+              <button class="btn" onclick="closeModal()" style="background: #e0e0e0;">Отмена</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Actions
+    window.login = function() {
+      const password = document.getElementById('password').value;
+      if (password === ADMIN_PASSWORD) {
+        isAuthenticated = true;
+        render();
+      } else {
+        alert('Неверный пароль');
+      }
+    };
+
+    window.logout = function() {
+      isAuthenticated = false;
+      render();
+    };
+
+    window.switchTab = function(tab) {
+      currentTab = tab;
+      searchQuery = '';
+      render();
+    };
+
+    window.search = function(query) {
+      searchQuery = query;
+      render();
+    };
+
+    window.openAddModal = function() {
+      editingWord = {
+        type: currentTab,
+        data: currentTab === 'stress' 
+          ? { word: '', stress: 0, hint: '', difficulty: 1 }
+          : { word: '', missing: '', options: ['', '', ''], hint: '', class: 1, emoji: '' }
+      };
+      render();
+    };
+
+    window.editStressWord = function(id) {
+      const word = getStressWords().find(w => w.id === id);
+      editingWord = { type: 'stress', data: { ...word } };
+      render();
+    };
+
+    window.editVocabWord = function(id) {
+      const word = getVocabWords().find(w => w.id === id);
+      editingWord = { type: 'vocab', data: { ...word } };
+      render();
+    };
+
+    window.closeModal = function() {
+      editingWord = null;
+      render();
+    };
+
+    window.saveWord = function() {
+      const word = document.getElementById('word').value;
+      const hint = document.getElementById('hint').value;
+
+      if (editingWord.type === 'stress') {
+        const stress = parseInt(document.getElementById('stress').value);
+        const difficulty = parseInt(document.getElementById('difficulty').value);
+        
+        if (editingWord.data.id) {
+          updateStressWord(editingWord.data.id, { word, stress, hint, difficulty });
+        } else {
+          addStressWord({ word, stress, hint, difficulty });
+        }
+      } else {
+        const missing = document.getElementById('missing').value;
+        const options = document.getElementById('options').value.split(',').map(s => s.trim());
+        const cls = parseInt(document.getElementById('class').value);
+        const emoji = document.getElementById('emoji').value;
+
+        if (editingWord.data.id) {
+          updateVocabWord(editingWord.data.id, { word, missing, options, hint, class: cls, emoji });
+        } else {
+          addVocabWord({ word, missing, options, hint, class: cls, emoji });
+        }
+      }
+
+      editingWord = null;
+      render();
+    };
+
+    window.deleteWord = function(type, id) {
+      if (!confirm('Удалить слово?')) return;
+      
+      if (type === 'stress') {
+        deleteStressWord(id);
+      } else {
+        deleteVocabWord(id);
+      }
+      
+      render();
+    };
+
+    // Initial render
+    render();
+  </script>
+</body>
+</html>
